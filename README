@@ -1,0 +1,6 @@
+This project houses my thesis writing; it's using LaTeX so it's awesome.
+
+Folders:
+latex    - main .tex and supporting cast (e.g. .bib)
+sections - here is where the real writing lives
+img      - pretty pictures
