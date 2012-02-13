@@ -6,17 +6,9 @@
 % modified by Mark Barry 2/07.
 %
 
-
-
+%---- SETUP SHENANIGANS ----%
 
 \documentclass[12pt]{ucthesis}
-
-%\newif\ifpdf
-%\ifx\pdfoutput\undefined
-%    \pdffalse % we are not running PDFLaTeX
-%\else
-%\pdfoutput=1 % we are running PDFLaTeX
-%\pdftrue \fi
 
 \usepackage{textcomp}
 \usepackage{url}
@@ -45,30 +37,23 @@
 % backgroundcolor=\color{lbcolor},
 }
 \usepackage{color}
-%\usepackage{ifpdf}
-%\ifpdf
 
-    \usepackage[pdftex]{graphicx}
-    % Update title and author below...
-    \usepackage[pdftex,plainpages=false,breaklinks=true,colorlinks=true,urlcolor=blue,citecolor=blue,%
-                                       linkcolor=blue,bookmarks=true,bookmarksopen=true,%
-                                       bookmarksopenlevel=3,pdfstartview=FitV,
-                                       pdfauthor=Ryan Schmitt,
-                                       pdftitle=GPU-Accelerated Point-Based Color Bleeding,
-                                       pdfkeywords={thesis, masters, cal poly, rendering, global illumination, GPU, acceleration}
-                                       ]{hyperref}
-    %Options with pdfstartview are FitV, FitB and FitH
-    \pdfcompresslevel=1
+\usepackage[pdftex]{graphicx}
 
-%\else
-%    \usepackage{graphicx}
-%\fi
+% Update title and author below...
+\usepackage[pdftex,plainpages=false,breaklinks=true,colorlinks=true,urlcolor=blue,citecolor=blue,
+linkcolor=blue,bookmarks=true,bookmarksopen=true, bookmarksopenlevel=3,pdfstartview=FitV,
+   pdfauthor=Ryan Schmitt,
+   pdftitle=GPU-Accelerated Point-Based Color Bleeding,
+   pdfkeywords={thesis, masters, cal poly, rendering, global illumination, GPU, acceleration}
+   ]{hyperref}
+   %Options with pdfstartview are FitV, FitB and FitH
+   \pdfcompresslevel=1
 
 \usepackage{amssymb}
 \usepackage{amsmath}
 \usepackage[letterpaper]{geometry}
 \usepackage[overload]{textcase}
-
 
 
 \bibliographystyle{abbrv}
@@ -94,7 +79,7 @@
   \fi
   \vskip\belowcaptionskip}
 \makeatother   % Cancel the effect of \makeatletter
-% ---------------------------------------
+% -------------------------------------------------------------
 
 \begin{document}
 
@@ -107,8 +92,6 @@
 \defensemonth{December} \defenseyear{2011}
 \numberofmembers{3} \chair{Zo\"{e} Wood, Ph.D.} \othermemberA{Chris Lupo, Ph.D.} \othermemberB{Michael Haungs, Ph.D.} \field{Computer Science} \campus{San Luis Obispo}
 \copyrightyears{seven}
-
-
 
 \maketitle
 
@@ -125,18 +108,17 @@
 \input{../sections/Abstract.tex}
 \endgroup
 
+%---- Acknowledgements ----
 \begin{acknowledgements}
-
    Thank you...
-
 \end{acknowledgements}
 
 
+%---- Navigation ----
 \tableofcontents
-
 \listoftables
-
 \listoffigures
+
 
 \end{frontmatter}
 
