@@ -2,44 +2,47 @@
 \chapter{Introduction}
 \label{intro}
 
-\section{Graphics \& Light}
-At its core, computer graphics is the visualization of light and its interaction in an abstract world, be this a simulation or a virtual world created by artists.  The ability to render scenes with realistic lighting is desirable for many entertainment application settings such as film.  Even in non-photo-realistic renders, the interaction of light is of paramount importance.
+\section{Computer Graphics}
+Computer graphics is, in general, anything produced by a computer that isn’t plain text or sound. Although, perhaps a more fitting definition is using a computer to draw a picture; this is also called rendering. There are a vast array of different areas in which one may want the help of a computer to render an image, from the entertaining, like video games and animated films, to the scientific, like medical visualization and computer-aided design and drafting. Each of these disciplines can have varying requirements of computer graphics: some need real-time rendering in order to respond to user-input, and others may trade the real-time speed for precise simulation. The goal of computer graphics is to identify the requirements of the application and render the highest quality image given those restrictions.
 
-\section{Global Illumination}
-The effort to accurately evaluate the radiometric quantities within a virtual scene, especially in non-real-time systems, may be referred to collectively as \textit{global illumination} \cite{verth:2008}.  In order to achieve greater realism, scenes must rely on more than simple direct-lighting algorithms and move to more complex systems to better evaluate light interaction (Figure \ref{fig:cornell}.)  This field of study has lent itself to the breathtaking visual effects in movies, advertisements, television shows and other artistic mediums.  The line between real and fake is getting blurrier every year as the lighting calculations become more and more exact.  As we have pushed the boundaries of our graphical capabilities, we also increase our computational complexity exponentially.
+\section{Ray-Tracing and Global Illumination}
+In particular, this thesis is concerned with ray-traced rendering using Global Illumination algorithms, which are most commonly utilized to produce high-quality photo-realistic images. A ray-tracing algorithm can be classified as a Global Illumination algorithm when it incorporates not only direct illumination from light sources, but indirect illumination, or light that is inter-reflected between scene geometry from the same light sources (TODO: Figure \#\#).
 
-\begin{figure}[h!]
-    \centering
-    \includegraphics[width=70mm]{../img/boxes_noindirect.png}
-    \includegraphics[width=70mm]{../img/indirect_box_high.png}
-    \captionfonts
-    \caption{A simple Cornell box scene with direct lighting only (left) and the same scene showing single-bounce light interaction through a global illumination algorithm (right.)}
-    \label{fig:cornell}
-\end{figure}
+Ray-tracing achieves photo-realism by simulating the physics of light using a scene comprised of light sources, mathematically-defined geometric surfaces, and a virtual camera (TODO: Figure \#\#). It produces renders that are specifically not real-time in nature, but meant to take as long as is necessary to produce quality results. In this setting, we must render life-like images, so an accurate simulation of light physics is required, but oftentimes we can obtain a convincing result using approximations. Specifically, ray-tracing follows the opposite path of the light: instead of tracing light rays from the light sources until they happen to hit the virtual camera, which is very physically accurate, we start at the camera and trace into the scene.
 
-\section{Color Bleeding Techniques}
+Once these primary rays travel from the camera, into the scene, and intersect with the geometry, we can calculate the shading at that point in order to determine the color of the primary ray’s associated pixel in the final rendered image. This shading calculation can vary from a simple direct illumination computation, to a complex Global Illumination calculation.
 
-Great results have been achieved for lighting complex scenes using point based color bleeding~\cite{christensen:2008} algorithms, where a point-cloud representation of a scene's direct lighting is computed for the purpose of efficiently calculating a representation of the scene's radiometric properties surrounding any given point.  Per H. Christensen's color bleeding algorithm (or similar implementations) is already in place in many production companies and used in many feature films.
+In this thesis, we focus on Global Illumination techniques. We split the calculation into direct illumination, which is the amount of light that leaves the source and directly intersects our shading point (TODO: Section \#.\#), and indirect illumination, which is the amount of light contributed from the diffuse inter-reflections of geometry in the scene (TODO: Section \#.\#); a phenomenon that is exemplified by the fact that the space under our desks is not completely dark, or that an illuminated red wall may reflect red light onto a nearby white box, causing it to appear reddish. These two components (direct and indirect illumination) are combined into one value that represents the incoming illumination at our primary ray’s intersection point. We solve for the amount of this illumination that follows back along the ray to the camera, and we write that value to the primary ray’s associated final image pixel. Performing this ray-tracing algorithm on each such final image pixel generates a rendering of the scene geometry as defined by the light sources and virtual camera, and is classified as Global Illumination.
 
-These algorithms, however, tend to limit or omit entirely the lighting contribution from volumetric data or participating media within the scenes.  Due to the highly complex nature of the domain, coupled with the computational complexity involved therein, many algorithms choose to disregard this portion of the lighting algorithm, often leaving the programmer or artist to fake the volume's contribution in other ways.
+\section{Monte Carlo Ray-Tracing}
+One of the most widely used methods for the indirect illumination calculation in ray-tracing is called Monte Carlo sampling, and it involves randomly and discretely sampling the hemisphere above an intersection point. This is performed by recursively tracing yet more rays into the scene in order to gather information about what geometry is nearby and what color it is shaded; this attempts to solve for the diffuse inter-reflections incident at an intersection point. 
 
+Typically, around one hundred twenty eight of these rays are traced from each primary ray intersection point, into the scene, in order to gather enough shading information about the adjacent geometry to calculate an accurate indirect illumination value. The number of rays that require intersection calculations, and shading calculations, can quickly escalate into the tens and hundreds of millions. Renders requiring multiple hours to complete are not rare.
+
+\section{Point-Based Color Bleeding}
+\label{sec:PBCB}
+Recently, the Point-Based Color Bleeding algorithm was developed at Pixar by Per H. Christensen \cite{christensen:2008} for indirect illumination. Instead of tracing rays, as in Monte Carlo ray-tracing, discretized surface elements (surfels) are rasterized onto a cube of eight-by-eight-pixel images, approximating the hemisphere used in the Monte Carlo ray-tracing. Once the surfels have been rasterized onto the pixels of the cube faces, the pixels are weighted and convolved into one value representing the indirect illumination at a point.
+
+The surfels are comprised of a location, surface normal, surface area, and shaded color computed from the direct illumination. The benefit of this technique is that the surfels can be precomputed and stored in a point cloud, separate from the scene geometry, and reused. This lends itself well to reduced memory usage, surface shading independent run-time, and faster renders than Monte Carlo ray-tracing, all of which are very useful properties for Pixar and movie production in general.
 
 \section{Our Contribution}
+This thesis is specifically concerned with performing the indirect illumination calculation faster than the Monte Carlo sampling method, without sacrificing render quality. We achieve this by extending PBCB (Section \ref{sec:PBCB}) to utilize the specialized rasterization capabilities of the modern graphics processing unit (GPU) to rasterize the point cloud onto five eight-by-eight-pixel images arranged into a cube above each primary ray intersection point; this technique approximates the hemisphere, described previously, that is used in Monte Carlo ray-tracing. Also, we contribute a preprocess where the scene’s geometry is transformed into triangles (the preferred geometric shape for GPU-rasterization) and assigned color values based on direct illumination calculations evaluated per triangle vertex.
 
-This paper presents an algorithm to address this missing component in the point based color bleeding algorithm.  Specifically, we propose the addition of a data representation tuned to volumes,  \emph{light-voxel (or lvoxel)} to address the need to represent participating media to an existing global illumination algorithm which leverages a point cloud representation of a scene.  Over the course of this paper, we will:
+\noindent In this paper, we:
+\begin{itemize}
+\item review important ray-tracing related equations and techniques,
+\item survey related, existing algorithms,
+\item present our PBCB extension and surfel generation preprocess,
+\item discuss and analyze our validation techniques and results.
+\end{itemize}
 
-\begin{enumerate}
-\item Discuss the surrounding subjects of light, volume rendering and global illumination,
-\item List and describe existing algorithms and related work,
-\item Describe how our algorithm meets our requirements and
-\item Analyze the results of our implementation.
-\end{enumerate}
+Our contributions realize much faster render times, as opposed to Monte Carlo ray-tracing, while maintaining visually similar results (TODO: Figure \#\#). We achieve this by avoiding the numerous and costly intersection and shading calculations, and in some cases, achieve an order of magnitude speedup.
 
-Our method achieves results comparable to those produced with Monte Carlo ray tracing but with drastically reduced run times, speeding up renders by a factor of 10.  Figure~\ref{fig:compare} clearly illustrates a close comparison of our algorithm and Monte Carlo ray traced results.
 
-\begin{figure}[h!]
-    \centering
-    \includegraphics[width=100mm]{../img/compare.png}
-    \caption{Bunny Scene comparison of the PCB extension (left) and traditional Monte Carlo results (right.)}
-    \label{fig:compare}
-\end{figure}
+
+%\begin{figure}[h!]
+%    \centering
+%    \includegraphics[width=100mm]{../img/compare.png}
+%    \caption{Bunny Scene comparison of the PCB extension (left) and traditional Monte Carlo results (right.)}
+%    \label{fig:compare}
+%\end{figure}

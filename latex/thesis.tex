@@ -120,29 +120,23 @@
 % Custom made for Cal Poly (by Andrew Tsui).
 \committeemembershippage
 
-\begin{abstract}
+%---- Abstract ----
+\begingroup
+\input{../sections/Abstract.tex}
+\endgroup
 
-Traditional Global Illumination lighting techniques like Radiosity and Monte Carlo sampling are computationally expensive. This has prompted the development of the Point-Based Color Bleeding (PBCB) algorithm by Pixar in order to approximate complex indirect illumination while meeting the demands of movie production; namely, reduced memory usage, surface shading independent run-time, and faster renders than the aforementioned lighting techniques.
+\begin{acknowledgements}
 
-The PBCB algorithm works by discretizing a scene’s directly illuminated geometry into a point cloud (surfel) representation. When computing the indirect illumination at a point, the surfels are rasterized onto cube faces surrounding that point, and the constituent pixels are combined into the final, approximate, indirect lighting value. This algorithm achieves better performance than Monte Carlo ray-tracing, but we attempt to enhance it further.
+   Thank you...
 
-Thus, in this thesis we present a performance enhancement to the Point-Based Color Bleeding algorithm through hardware acceleration; our contribution incorporates GPU-accelerated rasterization into the cube face raster phase. The goal is to leverage the powerful rasterization capabilities of modern graphics processors in order to speed up the PBCB algorithm over standard software rasterization. Our algorithm reproduces the output of the traditional PBCB technique, but reduces its run-time. We also compare our algorithm against our more accurate Monte Carlo tracing method in order to compare correctness.
-
-\end{abstract}
-
-%\begin{acknowledgements}
-
-%   Thank you...
-
-%\end{acknowledgements}
+\end{acknowledgements}
 
 
-% \tableofcontents
+\tableofcontents
 
+\listoftables
 
-% \listoftables
-
-% \listoffigures
+\listoffigures
 
 \end{frontmatter}
 
@@ -159,9 +153,9 @@ Thus, in this thesis we present a performance enhancement to the Point-Based Col
 \endgroup
 
 %---- Background ----
-\begingroup
-\input{../sections/Background.tex}
-\endgroup
+%\begingroup
+%\input{../sections/Background.tex}
+%\endgroup
 
 %% ------------- End main chapters ----------------------
 

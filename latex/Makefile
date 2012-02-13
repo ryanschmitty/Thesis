@@ -1,10 +1,11 @@
 TARGET=thesis
+SECTIONS := $(wildcard ../sections/*.tex)
 
 # make pdf by default
 all: ${TARGET}.pdf
 
 # make pdf
-%.pdf : ${TARGET}.bbl ${TARGET}.tex
+%.pdf : ${TARGET}.bbl ${TARGET}.tex $(SECTIONS)
 	pdflatex $*
 
 ${TARGET}.bbl: thesis.bib
@@ -15,7 +16,7 @@ ${TARGET}.bbl: thesis.bib
 	@pdflatex ${TARGET}.tex
 
 clean:
-	rm -f ${TARGET}.{out,log,aux,dvi,bbl,blg,log}
+	rm -f ${TARGET}.{out,log,aux,bbl,blg,lof,lot,toc}
 
 reallyclean: clean
 	rm -f ${TARGET}.pdf
