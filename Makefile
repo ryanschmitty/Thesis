@@ -7,11 +7,14 @@ SECTIONS := $(wildcard sections/*.tex)
 all: ${NEWNAME}.pdf
 
 # create pdf via latex
-${TARGETDIR}${TARGET}.pdf: ${TARGETDIR}${TARGET}.tex $(SECTIONS)
+${TARGETDIR}${TARGET}.pdf: ${TARGETDIR}${TARGET}.tex ${TARGETDIR}${TARGET}.bib $(SECTIONS)
 	cd ${TARGETDIR}; make
 
 %.pdf: ${TARGETDIR}${TARGET}.pdf
 	cp ${TARGETDIR}${TARGET}.pdf ${NEWNAME}.pdf
+
+open: all
+	open ${NEWNAME}.pdf
 
 
 clean:
