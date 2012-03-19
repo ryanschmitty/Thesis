@@ -5,10 +5,17 @@
 %-------------------------------------------------------------------------------
 \section{Algorithm Introduction}
 
+Indirect Illumination presents a computationally expensive problem. Potentially, the entirety of a scene's geometry could contribute illumination to any given point for which we try and compute indirect lighting. For Monte Carlo ray-tracing, intelligent randomness, spacial data structures, and attention to writing performant code can help alleviate the problem, but we can do better.
+
+Our algorithm uses rasterization, rather than ray-tracing, to determine the radiance during the shading computation. Rasterization has traditionally been used in real-time graphics due its high rendering throughput, but we leverage that same throughput here to reduce our render times. However, rasterization algorithms require specific input, namely triangles. Thus, we preprocess our scene geometry to convert it into a triangle-based surfel cloud, and store it in GPU memory. At render time, we can leverage the GPU to quickly rasterize these surfels onto cube-maps, capturing the radiance at a point. In this way, each cube-map-pixel represents the radiance at the location of the cube-map, in the direction of that pixel. This is analogous to the way Monte Carlo ray-tracing casts a ray and calculates shading at its scene intersection to represent radiance, in the ray's direction, at the ray's origin.
+
+In this chapter, we further discuss our GPU Point-Based Color Bleeding algorithm: section \ref{sec:surfel_generation} explains our preprocess for generating triangle-based surfels, section \ref{sec:rendering} follows with an explanation of our rendering pipeline. By combining our rasterization algorithm with GPU-hardware specifically designed for fast and parallel rasterization, we achieve quantitatively similar results in less time than Monte Carlo ray-tracing.
+
 %-------------------------------------------------------------------------------
 % SECTION: Surfel Generation
 %-------------------------------------------------------------------------------
 \section{Surfel Generation}
+\label{sec:surfel_generation}
 
 % ---- SUBSECTION: Box ----
 \subsection{Box}
@@ -26,6 +33,7 @@
 % SECTION: Rendering
 %-------------------------------------------------------------------------------
 \section{Rendering}
+\label{sec:rendering}
 
 % ---- SUBSECTION: Ray-Tracing ----
 \subsection{Ray-Tracing}
