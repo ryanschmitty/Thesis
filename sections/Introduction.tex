@@ -14,9 +14,10 @@ In particular, this thesis is concerned with ray-traced rendering using Global I
 
 \begin{figure}[h!]
     \centering
-    \includegraphics[width=70mm]{../img/cornell_simp_direct_only.png}
-    \includegraphics[width=70mm]{../img/cornell_simp_indirect.png}
-    \caption{Cornell Box: direct illumination, direct \& indirect illumination.}
+    \subfloat[Direct Only]{\includegraphics[width=70mm]{../img/cornell_simp_direct_only.png}}
+    ~
+    \subfloat[Direct \& Indirect]{\includegraphics[width=70mm]{../img/cornell_simp_indirect.png}}
+    \caption[Cornell Box direct \& indirect illumination]{Cornell Box rendered with both direct illumination and direct \& indirect illumination.}
     \label{fig:compare_illumination}
 \end{figure}
 
@@ -36,7 +37,7 @@ One of the most widely used methods for the indirect illumination calculation in
    \centering
    \includegraphics[width=80mm]{../img/shirley_monte_carlo.png}
    \captionfonts
-   \caption{Monte Carlo sampling of a hemisphere above an intersection point \cite{bib:shirley1991}.}
+   \caption[Monte Carlo hemisphere]{Monte Carlo sampling of a hemisphere above an intersection point \cite{bib:shirley1991}.}
    \label{fig:monte_carlo}
 \end{figure}
 
@@ -52,7 +53,7 @@ Recently, the Point-Based Color Bleeding algorithm was developed at Pixar by Per
    \centering
    \includegraphics[width=130mm]{../img/surfel_cloud_tris.png}
    \captionfonts
-   \caption{Surfels for the Cornell Box scene.}
+   \caption[Cornell Box surfels]{Surfels for the Cornell Box scene. Note that the surfel size has been reduced to exhibit the sufel shape and distribution.}
    \label{fig:surfels}
 \end{figure}
 
@@ -60,7 +61,7 @@ Recently, the Point-Based Color Bleeding algorithm was developed at Pixar by Per
    \centering
    \includegraphics[width=100mm]{../img/surfel_raster.png}
    \captionfonts
-   \caption{Surfels being rasterized onto an 8x8 cube \cite{bib:christensen_slides}.}
+   \caption[Rasterizing surfels]{Surfels being rasterized onto an 8x8 cube \cite{bib:christensen_slides}.}
    \label{fig:surfel_raster}
 \end{figure}
 
@@ -84,9 +85,10 @@ Our contributions realize much faster render times, as opposed to Monte Carlo ra
 
 \begin{figure}[h!]
     \centering
-    \includegraphics[width=70mm]{../img/cornell_simp_area_mcs.png}
-    \includegraphics[width=70mm]{../img/cornell_simp_area_srf.png}
-    \caption{Cornell Box with Indirect Illumination: Monte Carlo Sampling, GPU PBCB.}
+    \subfloat[Monte Carlo]{\includegraphics[width=70mm]{../img/cornell_simp_area_mcs.png}}
+    ~
+    \subfloat[GPU PBCB]{\includegraphics[width=70mm]{../img/cornell_simp_area_srf.png}}
+    \caption[Cornell Box comparison]{Cornell Box with Indirect Illumination using both Monte Carlo Sampling and GPU PBCB.}
     \label{fig:compare_techniques}
 \end{figure}
 

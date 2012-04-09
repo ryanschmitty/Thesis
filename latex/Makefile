@@ -17,7 +17,7 @@ ${TARGET}.bbl: thesis.bib
 	@pdflatex ${TEXARGS} ${TARGET}.tex
 
 clean:
-	rm -f ${TARGET}.{out,log,aux,bbl,blg,lof,lot,toc}
+	rm -f ${TARGET}.{out,log,aux,bbl,blg,lof,lot,toc,loa}
 
 reallyclean: clean
 	rm -f ${TARGET}.pdf
