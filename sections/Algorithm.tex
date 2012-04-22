@@ -7,9 +7,9 @@
 
 Indirect Illumination presents a computationally expensive problem. Potentially, the entirety of a scene's geometry could contribute illumination to any given point for which we try and compute indirect lighting. For Monte Carlo ray-tracing, intelligent randomness, spacial data structures, and attention to writing performant code can help alleviate the problem, but we can do better.
 
-Our algorithm uses rasterization, rather than ray-tracing, to determine the radiance during the shading computation. Rasterization has traditionally been used in real-time graphics due its high throughput, but we can leverage that same throughput to reduce our time spent caculating indirect illumination. However, rasterization algorithms require specific input, namely triangles. Thus, we preprocess our scene geometry to convert it into a triangle-based surfel cloud, and store it in GPU memory. At render time, we can leverage the GPU to quickly rasterize these surfels, in parallel, onto cube-maps to capture the radiance at a point. In this way, each cube-map-pixel represents the radiance at the location of the cube-map, in the direction of that pixel. This is analogous to the way Monte Carlo ray-tracing casts a ray and calculates shading at its scene intersection to represent radiance, in the ray's direction, at the ray's origin.
+Our algorithm uses rasterization, rather than ray-tracing, to determine the radiance during the shading computation. Rasterization has traditionally been used in real-time graphics due its high throughput, but we can leverage that same throughput to reduce our time spent caculating indirect illumination. However, we want to also gain hardware acceleration, and GPU rasterization algorithms require specific input, namely triangles. Thus, we preprocess our scene geometry to convert it into a triangle-based surfel cloud, and store it in GPU memory. At render time, we can leverage the GPU to quickly rasterize these surfels, in parallel, onto cube-maps to capture the radiance at a point. In this way, each cube-map-pixel represents the radiance at the location of the cube-map, in the direction of that pixel. This is analogous to the way Monte Carlo ray-tracing casts a ray and calculates shading at its scene intersection to represent radiance, in the ray's direction, at the ray's origin.
 
-In this chapter, we further discuss our GPU Point-Based Color Bleeding algorithm: section \ref{sec:surfel_generation} explains our preprocess for generating triangle-based surfels, section \ref{sec:rendering} follows with an explanation of our rendering pipeline. By combining our rasterization algorithm with GPU-hardware specifically designed for fast and parallel rasterization, we achieve quantitatively similar results in less time than Monte Carlo ray-tracing.
+In this chapter, we further discuss our GPU Point-Based Color Bleeding algorithm: section \ref{sec:surfel_generation} explains our preprocess for generating triangle-based surfels, section \ref{sec:rendering} follows with an explanation of our rendering pipeline. By combining our indirect illumination algorithm with GPU-hardware specifically designed for fast and parallel rasterization, we achieve quantitatively similar results in less time than Monte Carlo ray-tracing.
 
 As an overview, the algorithm steps are as follows:
 
@@ -21,7 +21,7 @@ As an overview, the algorithm steps are as follows:
 \begin{algorithmic}
    \Function{GPUPointBasedColorBleeding}{$scene$}
       \ForAll{$geomPrimitive$ \textbf{in} $scene$}
-         \State $surfels$ += GenerateSurfels($geomPrimitive$, 500)
+         \State $surfels$ += GenerateSurfels($geomPrimitive$, 500) //see alg. \ref{alg:surfel_gen}
       \EndFor
       \State $rays$ := GenerateRays($scene$.imageDescription)
       \ForAll{$ray$ \textbf{in} $rays$}
@@ -83,8 +83,8 @@ Points for the box primitive are generated per side. Each side is divided into a
       \State $pointsPerSide := numSamples / 6$
       \State $pointsPerDim$ := sqrt($pointsPerSide$)
       \For{\textbf{each} $side$ \textbf{in} $boxSides$}
-         \For{$u \in pointsPerDim$}
-            \For{$v \in pointsPerDim$}
+         \For{$u := 0...pointsPerDim$}
+            \For{$v := 0...pointsPerDim$}
                \State $\alpha := (u + $rand($0,1$)$) / pointsPerDim$
                \State $\beta := (v + $rand($0,1$)$) / pointsPerDim$
                \If{$side$ = small z-plane}
@@ -112,7 +112,7 @@ Points for the box primitive are generated per side. Each side is divided into a
                   \State $y := box.end.y$
                   \State $z := (1-\beta) * box.start.z + \beta * box.end.z$
                \EndIf
-               \State $point := box.modelTransform * <x, y, z>$
+               \State $point := box.modelTransform *$ \textless$x, y, z$\textgreater
                \State $points$ += $point$
             \EndFor
          \EndFor
@@ -126,6 +126,8 @@ Points for the box primitive are generated per side. Each side is divided into a
 % ---- SUBSUBSECTION: Sphere ----
 \subsubsection{Sphere}
 \label{sec:sphere_point_gen}
+Point generation for a sphere is based on a uniform sampling algorithm [TODO] that requires two uniform random variables as input. Instead of using entirely uniform random variables, u and v, we step through u and v coordinates, which effective subdivides the sphere into a grid. Again we jitter the coordinates to help randomize our surfel cloud.
+The psuedocode can be seen in Algorithm \ref{alg:sphere_point_gen}.
 Point distributions for a sphere can be seen in Figure \ref{fig:small_sphere_surfels}.
 
 \begin{algorithm}[H]
@@ -135,6 +137,22 @@ Point distributions for a sphere can be seen in Figure \ref{fig:small_sphere_sur
 {\fontsize{10}{9}\selectfont
 \begin{algorithmic}
    \Function{SampleGeometry}{$sphere, numSamples$}
+      \State $numPointsU$ := sqrt($numSamples$)
+      \State $numPointsV$ := $numSamples / numPointsU$
+      \For{$i := 0...numPointsU$}
+         \For{$j := 0...numPointsV$}
+            \State $u := (i + $rand($0,1$)$) / numPointsU$
+            \State $v := (j + $rand($0,1$)$) / numPointsV$
+            \State $z := 1 - 2*u$
+            \State $r$ := sqrt(max($0, 1- z*z$))
+            \State $\phi := 2 * \pi * v$
+            \State $x := r *$ cos($\phi$)
+            \State $y := r *$ sin($\phi$)
+            \State $point := \textless x, y, z \textgreater * sphere.radius + sphere.center$
+            \State $point := sphere.modelTransform * point$
+            \State $points$ += $point$
+         \EndFor
+      \EndFor
       \State \Return $points$
    \EndFunction
 \end{algorithmic}
@@ -144,6 +162,11 @@ Point distributions for a sphere can be seen in Figure \ref{fig:small_sphere_sur
 % ---- SUBSUBSECTION: Triangle ----
 \subsubsection{Triangle}
 \label{sec:triangle_point_gen}
+We generate our triangle sample points by modifying a uniform sample pattern algorithm [TODO] in a similar manner to our sphere point generation.
+The original algorithm requires two uniformly random variables as input, and will generate a uniformly distributed random point on the triangle.
+By discretizing the u and v values and stepping through them, we effectively walk a uniformly distributed grid across the triangle's surface area.
+Again, we jitter the sample point location in order to eliminate any regular patterns.
+The psuedocode can be seen in Algorithm \ref{alg:triangle_point_gen}.
 Point distributions for a triangle can be seen in Figure \ref{fig:small_triangle_surfels}.
 
 \begin{algorithm}[H]
@@ -153,7 +176,25 @@ Point distributions for a triangle can be seen in Figure \ref{fig:small_triangle
 {\fontsize{10}{9}\selectfont
 \begin{algorithmic}
    \Function{SampleGeometry}{$triangle, numSamples$}
-   \State \Return $points$
+      \State $numPointsU$ := sqrt($numSamples$)
+      \State $numPointsV$ := $numSamples / numPointsU$
+      \State $v_{0..1} := triangle.vertex1 - triangle.vertex0$
+      \State $v_{0..2} := triangle.vertex2 - triangle.vertex0$
+      \For{$i := 0...numPointsU$}
+         \For{$j := 0...numPointsV$}
+            \State $u := (i + $rand($0,1$)$) / numPointsU$
+            \State $v := (j + $rand($0,1$)$) / numPointsV$
+            \State // Inside or outside the triangle?
+            \If{$u + v < 1$}
+               \State $point := triangle.vertex0 + u*v_{0..1} + v*v_{0..2}$
+            \Else
+               \State $point := triangle.vertex0 + (1-u)*v_{0..1} + (1-v)*v_{0..2}$
+            \EndIf
+            \State $point := triangle.modelTransform * point$
+            \State $points$ += $point$
+         \EndFor
+      \EndFor
+      \State \Return $points$
    \EndFunction
 \end{algorithmic}
 }
@@ -163,16 +204,16 @@ With the previous point distribution algorithms, we must address the issue of no
 
 Our solution to this problem is simple, easy to implement, and novel in the fact that it is geometry and transformation independent. We generate a multiple of the requested number of sample points, jitter their location, and repeatedly cull the two closest points until we arrive at the desired number of points. In this way, we work backwards to a more uniform distribution in a way that supports arbitrary geometric topology and transformations. Figures \ref{fig:small_box_surfels}, \ref{fig:small_sphere_surfels}, and \ref{fig:small_triangle_surfels} show the result of this process for varying multiples of the requested number of surfels; notice the coverage issues caused by not generating more than the requested number of surfels (e.g. Figure \ref{fig:box500s}).
 
-The pseudocode is listed in Algorithm \ref{alg:point_cull}.
+The pseudocode is listed in Algorithm \ref{alg:point_gen}.
 
 \begin{algorithm}
 \captionfont
-\caption[Closest point culling]{Repeatedly cull one of the two closest points.}
-\label{alg:point_cull}
+\caption[Create Points and Cull]{Create points and repeatedly cull one of the two closest points.}
+\label{alg:point_gen}
 {\fontsize{10}{9}\selectfont
 \begin{algorithmic}
    \Function{GeneratePoints}{$geomPrimitive, numberOfSamples$}
-      \State $points :=$ SampleGeometry($geomPrimitive$, $2*numberOfSamples$)
+      \State $points :=$ SampleGeometry($geomPrimitive$, $2*numberOfSamples$) //alg. \ref{alg:box_point_gen}, \ref{alg:sphere_point_gen}, \ref{alg:triangle_point_gen}
       \While{$points$.length $>$ $desiredNumPoints$}
          \State $minPointIndex :=$ FindAndRemoveClosestPoints($points$)
          \State $points$.remove($minPointIndex$)
@@ -199,14 +240,14 @@ vectorLength = \sqrt{ \frac{ \pi * radius^2 }{ \sqrt{3} * \sin^2(60) } }
 
 However, the random jittering of sample points often results in initial sample points that are very close together. While the jittering produces the desired randomness, it also gives us too low an estimate of the required radius; the result of which can be seen in Figure \ref{fig:box500}. But the aforementioned point culling solution (see Section \ref{sec:point_gen}) also solves this problem. By culling the closest points, we create a more uniform distribution with less variance in the distance between adjacent sample points.
 
-For typical surfel generation times per geometric primitive, see Table \ref{tbl:surf_gen_times}. In psuedocode, our surfel generation algorithm is listed in Algorithm \ref{alg:surfel_gen}. And Figure \ref{fig:surfel_cloud_simple} is a rendering of the raw surfel cloud in OpenGL.
+For typical surfel generation times per geometric primitive, see Table \ref{tbl:surf_gen_times}. In psuedocode, our surfel generation algorithm is listed in Algorithm \ref{alg:surfel_gen}. And Figure \ref{fig:surfel_cloud_simple} is a rendering of the raw surfel cloud in OpenGL without any lighting.
 
 \begin{figure}
    \centering
    \includegraphics[width=100mm]{../img/surfel_cloud_simple.png}
    \captionfonts
-   \caption[Cornell Box surfel cloud]{Surfels generated for the Cornell Box scene rendered in OpenGL using a VBO.}
-   \label{fig:surfelcloud}
+   \caption[OpenGL Cornell Box surfel cloud]{Surfels generated for the Cornell Box scene rendered, without lighting, in OpenGL using a VBO.}
+   \label{fig:surfel_cloud_simple}
 \end{figure}
 
 \begin{algorithm}[H]
@@ -216,7 +257,7 @@ For typical surfel generation times per geometric primitive, see Table \ref{tbl:
 {\fontsize{10}{9}\selectfont
 \begin{algorithmic}
    \Function{GenerateSurfels}{$geomPrimitive, numberOfSurfels$}
-      \State $points :=$ GeneratePoints($geomPrimitive, numberOfSurfels$)
+      \State $points :=$ GeneratePoints($geomPrimitive, numberOfSurfels$) //see alg. \ref{alg:point_gen}
       \State $minD :=$ FindClosestPoints($points$)
       \State $vectorLength := 2 * $sqrt(($PI * minD * minD$)$ / 1.299$) //see eqn. \ref{eqn:tri_dist}
       \ForAll{$point$ \textbf{in} $points$}
@@ -356,12 +397,23 @@ The surfels are generated on the CPU, but they must be rendered by the GPU. Ther
 %-------------------------------------------------------------------------------
 \section{Rendering}
 \label{sec:rendering}
+Our rendering algorithm follows standard ray-tracing as discussed in Section \ref{sec:ray_tracing_intro} [TODO: possibly add a more in-detail section in background work], with the exception of the indirect lighting computation. The pseudocode is listed in Algorithm [TODO]. For indirect lighting, we use our GPU PBCB algorithm (see section \ref{sec:indirect}).
 
 % ---- SUBSECTION: Ray-Tracing ----
 \subsection{Ray-Tracing}
+First, we generate a list of rays, one per pixel, by iterating over all final-image pixels. As input we require a virtual camera definition, which provides a world-space location and field of view characteristics such as width and height of the final image. A ray is composed of an origin point, inherited from the virtual camera's location, and direction, calculated as the vector between the origin and associated pixel's center.
 
-% ---- SUBSECTION: Indirect Gather via Rasterization ----
-\subsection{Indirect Gather via Rasterization}
+We then iterate over the list of rays, tracing them against the scene geometry to calculate their intersection point. The intersection algorithms are based on [TODO, pbr] and [TODO, essntl mth fr gms].
+
+Once we solve for the ray's intersection point with a geometric object, we calculate lighting. Because light calculations are additive [TODO], we can split the calculation into a direct and an indirect computation.
+
+Our direct lighting calculation is quite simple: in the case of point lighting, we simply trace one shadow ray (see section TODO) and if the path to the light is unobstructed, then we calculate standard Lambertian shading (see section TODO), and in the case of area lighting we trace multiple shadow rays, in a uniform random distribution over the area light geometry, and scale the Lambertian shading by the percent of unobstructed rays.
+
+The indirect lighting computation uses our GPU PBCB algorithm and is the focus of this thesis. We describe the algorithm in detail in Section \ref{sec:indirect}, discuss the performance characteristics in Section TODO (add a section here, or in the results section?), analyze our results in Section \ref{sec:analysis}, and discuss future work in Section \ref{sec:future_work}.
+
+% ---- SUBSECTION: Indirect Gather via Rasterization (GPU PBCB) ----
+\subsection{Indirect Gather via Rasterization (GPU PBCB)}
+\label{sec:indirect}
 
 % ---- SUBSECTION: Final Color Computation ----
 \subsection{Final Color Computation}
