@@ -397,10 +397,13 @@ The surfels are generated on the CPU, but they must be rendered by the GPU. Ther
 %-------------------------------------------------------------------------------
 \section{Rendering}
 \label{sec:rendering}
-Our rendering algorithm follows standard ray-tracing as discussed in Section \ref{sec:ray_tracing_intro} [TODO: possibly add a more in-detail section in background work], with the exception of the indirect lighting computation. The pseudocode is listed in Algorithm [TODO]. For indirect lighting, we use our GPU PBCB algorithm (see section \ref{sec:indirect}).
+Our rendering algorithm follows standard ray-tracing as discussed in Section \ref{sec:ray_tracing_intro} [TODO: possibly add a more in-detail section in background work], with the exception of the indirect lighting computation. The pseudocode is listed in Algorithm [TODO].
+
+The indirect lighting computation uses our GPU PBCB algorithm and is the focus of this thesis. We describe the algorithm in detail in Section \ref{sec:indirect}, discuss the performance characteristics in Section TODO (add a section here, or in the results section?), analyze our results in Section \ref{sec:analysis}, and discuss future work in Section \ref{sec:future_work}.
 
 % ---- SUBSECTION: Ray-Tracing ----
 \subsection{Ray-Tracing}
+\ref{sec:rendering_ray_tracing}
 First, we generate a list of rays, one per pixel, by iterating over all final-image pixels. As input we require a virtual camera definition, which provides a world-space location and field of view characteristics such as width and height of the final image. A ray is composed of an origin point, inherited from the virtual camera's location, and direction, calculated as the vector between the origin and associated pixel's center.
 
 We then iterate over the list of rays, tracing them against the scene geometry to calculate their intersection point. The intersection algorithms are based on [TODO, pbr] and [TODO, essntl mth fr gms].
@@ -409,11 +412,21 @@ Once we solve for the ray's intersection point with a geometric object, we calcu
 
 Our direct lighting calculation is quite simple: in the case of point lighting, we simply trace one shadow ray (see section TODO) and if the path to the light is unobstructed, then we calculate standard Lambertian shading (see section TODO), and in the case of area lighting we trace multiple shadow rays, in a uniform random distribution over the area light geometry, and scale the Lambertian shading by the percent of unobstructed rays.
 
-The indirect lighting computation uses our GPU PBCB algorithm and is the focus of this thesis. We describe the algorithm in detail in Section \ref{sec:indirect}, discuss the performance characteristics in Section TODO (add a section here, or in the results section?), analyze our results in Section \ref{sec:analysis}, and discuss future work in Section \ref{sec:future_work}.
 
 % ---- SUBSECTION: Indirect Gather via Rasterization (GPU PBCB) ----
 \subsection{Indirect Gather via Rasterization (GPU PBCB)}
 \label{sec:indirect}
+By using the GPU's ability to rasterize triangles, we capture the incoming radiance at a ray intersection point by rasterizing our surfel cloud onto five 8 by 8 pixel textures arranged into a cube about the point. The cube represents the hemisphere used in Section [TODO:background lighting eqn]. Using this technique, we attempt to realize a speedup over Monte Carlo ray-tracing as well as software-based PBCB. The psuedocode is listed in Algorithm [TODO].
+
+Our implementation utilizes the OpenGL API, along with helper libraries: GLUT and GLEW. Therefore, as a preamble to the algorithm, we must initialize OpenGL. This requires creating the OpenGL rendering context and associated buffers, and setting some constant state. In our case, we require an 8 by 8 pixel color texture and depth texture, and a vertex buffer with which we store our surfel data. Lastly, we set the constant rendering state by disabling OpenGL lighting such that the color we calculate in the surfel generation preprocess will be used directly, and by binding our textures and buffers, which informs OpenGL on how to use each buffer (e.g. render to color texture, or where vertex, color, and surface normal data is per triangle in the VBO).
+
+As discussed in Section \ref{sec:rendering_ray_tracing} and \ref{sec:ray_tracing_intro}, the geometry intersection for each ray is computed, and then lighting for that point is calculated. And because light is linear [TODO], we can calculate our indirect illumination separately from direct, and combine at a later time.
+
+We begin our indirect illumination calculation for each intersection point by constructing five cameras that hold the render state required to rasterize each cube face. The cameras store their location, direction, up-vector, field of view, and near and far planes. The location for each camera is inherited from the intersection point. The direction is the intersection point's surface normal for the camera representing the top of the cube, and for the remaining cameras, we use the surface tangent, rotated in 90$^\circ$ increments. The up-vector for the cube-side cameras is the surface normal, and the top camera uses one of the side camera's direction vector. The field of view is set to 45$^\circ$ for each camera such that their viewing frustums fit together with no gaps (see figure [TODO]). The near plane is set to 0.01, and the far plane is set to 15 (see Section TODO), which we have found offers good results for our test scene.
+
+Once the cube-face cameras are constructed, we iterate over each, and rasterize the surfel cloud onto an 8 by 8 pixel texture at the camera's near plane (see figure TODO). This texture data must then be read back from the GPU, and convolved into one indirect illumination value. We do this by iterating over each pixel, and adding it's contribution, calculated using the Lambertian reflectance model (see section TODO), to the final color.
+
+Once each cube face has been rasterized and convolved, we return the final color as our indirect illumination value at the intersection point.
 
 % ---- SUBSECTION: Final Color Computation ----
 \subsection{Final Color Computation}
