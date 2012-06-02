@@ -22,7 +22,14 @@ In particular, this thesis is concerned with ray-traced rendering using Global I
     \label{fig:compare_illumination}
 \end{figure}
 
-Ray-tracing achieves photo-realism by simulating the physics of light using a scene comprised of light sources, mathematically-defined geometric surfaces, and a virtual camera (TODO: figure). It produces renders that are specifically not real-time in nature, but meant to take as long as is necessary to produce quality results. In this setting, we must render life-like images, so an accurate simulation of light physics is required, but oftentimes we can obtain a convincing result using approximations. Specifically, ray-tracing follows the opposite path of the light: instead of tracing light rays from the light sources until they happen to hit the virtual camera, which is very physically accurate, we start at the camera and trace into the scene.
+Ray-tracing achieves photo-realism by simulating the physics of light using a scene comprised of light sources, mathematically-defined geometric surfaces, and a virtual camera (see figure \ref{fig:camera}). It produces renders that are specifically not real-time in nature, but meant to take as long as is necessary to produce quality results. In this setting, we must render life-like images, so an accurate simulation of light physics is required, but oftentimes we can obtain a convincing result using approximations. Specifically, ray-tracing follows the opposite path of the light: instead of tracing light rays from the light sources until they happen to hit the virtual camera, which is very physically accurate, we start at the camera and trace into the scene.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=100mm]{../img/RTR3_14_09_camera.png}
+    \caption[Virtual camera, frustum, and geometry]{The eye and virtual camera are equivalent, geometry that lies in the viewing frustum is rendered. \cite{bib:rtr}}
+    \label{fig:camera}
+\end{figure}
 
 Once these primary rays travel from the camera, into the scene, and intersect with the geometry, we can calculate the shading at that point in order to determine the color of the primary ray's associated pixel in the final rendered image. This shading calculation can vary from a simple direct illumination computation, to a complex Global Illumination calculation.
 
@@ -32,6 +39,7 @@ In this thesis, we focus on Global Illumination techniques. We split the calcula
 % SECTION: Monte Carlo Ray-Tracing
 %-------------------------------------------------------------------------------
 \section{Monte Carlo Ray-Tracing}
+\label{sec:monte_carlo}
 One of the most widely used methods for the indirect illumination calculation in ray-tracing is called Monte Carlo sampling, and it involves randomly and discretely sampling the hemisphere above an intersection point (Figure \ref{fig:monte_carlo}). This is performed by recursively tracing yet more rays into the scene in order to gather information about what geometry is nearby and what color it is shaded; this attempts to solve for the diffuse inter-reflections incident at an intersection point. 
 
 \begin{figure}[h]
@@ -72,17 +80,17 @@ The surfels are comprised of a location, surface normal, surface area, and shade
 % SECTION: Our Contribution
 %-------------------------------------------------------------------------------
 \section{Our Contribution}
-This thesis is primarily concerned with performing the indirect illumination calculation faster than the Monte Carlo sampling method, without sacrificing render quality. We achieve this by extending PBCB to utilize the specialized rasterization capabilities of the modern graphics processing unit (GPU) to rasterize the point cloud onto five eight-by-eight-pixel images arranged into a cube above each primary ray intersection point; this technique approximates the hemisphere that is used in Monte Carlo ray-tracing (TODO: figure). Also, we contribute a preprocess where the scene's geometry is transformed into triangles (the preferred geometric shape for GPU-rasterization) and assigned color values based on direct illumination calculations evaluated per triangle vertex (TODO: verify).
+This thesis is primarily concerned with performing the indirect illumination calculation faster than the Monte Carlo sampling method, without sacrificing render quality. We achieve this by extending PBCB to utilize the specialized rasterization capabilities of the modern heterogenous architecture chips' graphics processing unit (GPU) to rasterize the point cloud onto five eight-by-eight-pixel images arranged into a cube above each primary ray intersection point; this technique approximates the hemisphere that is used in the radiance integral (see section \ref{sec:radiance}). Also, we contribute a preprocess where the scene's geometry is transformed into triangles (the preferred geometric shape for GPU-rasterization) and assigned color values based on direct illumination calculations evaluated per triangle vertex.
 
 \noindent In this paper, we:
 \begin{itemize}
-\item review important ray-tracing related equations and techniques,
+\item review important rendering related equations and techniques,
 \item provide an in-depth description of the PBCB alrogithm,
 \item present our PBCB extension and surfel generation preprocess,
 \item discuss and analyze our validation techniques and results.
 \end{itemize}
 
-Our contributions realize much faster render times, as opposed to Monte Carlo ray-tracing, while maintaining visually similar results (Figure \ref{fig:compare_techniques}). We achieve this by avoiding the numerous and costly intersection and shading calculations inherent in Monte Carlo Ray-tracing, and in some cases, achieve an order of magnitude speedup.
+Our contributions, leveraging the modern heterogenous chips, realize much faster render times compared to Monte Carlo ray-tracing, while maintaining visually similar results (Figure \ref{fig:compare_techniques}). We achieve this by avoiding the numerous and costly intersection and shading calculations inherent in Monte Carlo Ray-tracing, and in some cases achieve an order of magnitude speedup.
 
 \begin{figure}[h!]
     \centering
