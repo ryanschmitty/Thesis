@@ -5,13 +5,22 @@
 %-------------------------------------------------------------------------------
 \section{Algorithm Introduction}
 
-Indirect Illumination presents a computationally expensive problem. Potentially, the entirety of a scene's geometry could contribute illumination to any given point for which we try to compute indirect lighting. For Monte Carlo ray-tracing, intelligent randomness, spacial data structures, and attention to writing performant code can help alleviate the problem, but we can do better.
+Indirect illumination presents a computationally expensive problem. Potentially, the entirety of a scene's geometry could contribute illumination to any given point for which we try to compute indirect lighting. For Monte Carlo ray-tracing, intelligent randomness, spatial data structures, and attention to writing performant code can help alleviate the problem, but we can do better.
 
-Our algorithm uses rasterization, rather than ray-tracing, to determine the radiance during the indirect shading computation. Rasterization has traditionally been used in real-time graphics due its high throughput, but we can leverage that same throughput to reduce our time spent caculating indirect illumination. However, we want to also gain hardware acceleration, and GPU rasterization algorithms require specific input, namely triangles. Thus, we preprocess our scene geometry to convert it into a triangle-based surfel cloud, and store it in GPU memory. At render time, we can leverage the GPU to quickly rasterize these surfels, in parallel, onto cube-maps to capture the radiance at a point.
+Our algorithm uses rasterization, rather than ray-tracing, to determine the radiance during the indirect shading computation. Rasterization has traditionally been used in real-time graphics due its high throughput, but we can leverage that same throughput to reduce our time spent calculating indirect illumination. However, we want to also gain hardware acceleration, and GPU rasterization algorithms require specific input, namely triangles. Thus, we preprocess our scene geometry to convert it into a triangle-based surfel cloud, and store it in GPU memory. At render time, we can leverage the GPU to quickly rasterize these surfels, in parallel, onto cube-maps to capture the radiance at a point. Figure \ref{fig:surfel_raster} visualizes the rasterization of surfels onto a cube-map.
+
+\begin{figure}[h!]
+   \centering
+   \includegraphics[width=100mm]{../img/surfel_raster.png}
+   \captionfonts
+   \caption[Rasterizing surfels]{Surfels being rasterized onto an 8x8 cube \cite{bib:christensen_slides}.}
+   \label{fig:surfel_raster}
+\end{figure}
+
 
 In this way, each cube-map pixel represents the radiance at the location of the cube-map, in the direction of that pixel. This is analogous to the way Monte Carlo ray-tracing casts a ray and calculates shading at its scene intersection to represent radiance, in the ray's direction, at the ray's origin.
 
-In this chapter, we further discuss our GPU Point-Based Color Bleeding algorithm: section \ref{sec:surfel_generation} explains our preprocess for generating triangle-based surfels, section \ref{sec:rendering} follows with an explanation of our rendering pipeline. By combining our indirect illumination algorithm with GPU-hardware specifically designed for fast and parallel rasterization, we achieve quantitatively similar results in less time than Monte Carlo ray-tracing.
+In this chapter, we further discuss our GPU Point-Based Color Bleeding algorithm: Section \ref{sec:surfel_generation} explains our preprocess for generating triangle-based surfels, Section \ref{sec:rendering} follows with an explanation of our rendering pipeline. By combining our indirect illumination algorithm with GPU-hardware specifically designed for fast and parallel rasterization, we achieve quantitatively similar results in less time than Monte Carlo ray-tracing.
 
 As an overview, the algorithm steps are as follows:
 
@@ -45,31 +54,41 @@ As an overview, the algorithm steps are as follows:
 \section{Surfel Generation}
 \label{sec:surfel_generation}
 
-The PBCB algorithm relies on the abstract representation of a scene's geometry as surfels in order to leverage the power of rasterization. Real-time graphics applications also utilize rasterization, but do not use surfel representations. This is because they target specific framerates between 30 and 60 frames per second, allowing 16 to 33 milliseconds for the computation of dynamic shadows, Phong shading, texture mapping, bump mapping, and other techniques on a per pixel basis. In the case of PBCB, rasterization must perform as fast as possible. To achieve this, additional computations of the kind referred to earlier (e.g. dynamic shadows) are avoided, and the rasterization algorithm simply uses the color of the surfel directly as the pixel's color. This is the reason why the PBCB algorithm does not simply rasterize the geometric primitives as a whole, but subdivides them into surfels with one color, computed as the direct illumination at the surfel's location on the scene geometry. If this were not the case, each geometric primitive would only be represented by one color, resulting in inaccurate indirect illumination.
+The PBCB algorithm relies on the abstract representation of a scene's geometry as surfels in order to leverage the power of rasterization. Real-time graphics applications also utilize rasterization, but do not use surfel representations. This is because they target specific framerates between 30 and 60 frames per second, allowing 16 to 33 milliseconds for the computation of Phong shading, texture mapping, bump mapping, and other techniques, such as dynamic shadows, on a per pixel basis. In the case of PBCB, rasterization must perform as fast as possible. To achieve this, additional computations of the kind referred to earlier (e.g. dynamic shadows) are avoided, and the rasterization algorithm simply uses the color of the surfel, computed as the direct illumination at the surfel's location on the source geometry, directly as the pixel's color.
 
-In the traditional PBCB algorithm, surfels are disks, but our GPU PBCB cannot use this representation. The GPU is specifically designed to render images quickly by parallelizing the work, thus increasing throughput. However, we gain this performance at the cost of generality: the GPU can only process triangles as input data. Therefore, we must translate the representation of our geometric primitives into triangles (see Figure \ref{fig:surfelcloud}).
+The reason why the PBCB algorithm does not simply rasterize the geometric primitives as a whole is because each primitive would only be represented by one color, resulting in inaccurate indirect illumination. Another benefit of surfels are that they are uniform in size and therefore are amenable to binning in spatial data structures. Our thesis does not incorporate a spatial data structure because the GPU does not require one itself and simply brute force rasterizes the entire surfel cloud in parallel. However, we discuss how a spatial data structure could be incorporated in our future work section on the topic (see Section \ref{sec:future_spatial}).
+
+In the traditional PBCB algorithm, surfels are disks, but our GPU PBCB algorithm cannot use this representation. The GPU is specifically designed to render images quickly by parallelizing the work, thus increasing throughput. However, we gain this performance at the cost of generality: the GPU can only process triangles as input data. Therefore, we must translate the representation of our geometric primitives into triangles (see Figure \ref{fig:surfelcloud}).
 
 \begin{figure}[h!]
    \centering
    \includegraphics[width=100mm]{../img/cornell_simp_area_surfelcloud.png}
    \captionfonts
-   \caption[Cornell Box with area light surfels]{The surfels generated for our Cornell Box with area light. Note that the surfel size has been reduced to exhibit the sufel shape and distribution.}
+   \caption[Cornell Box with area light surfels]{The surfels generated for our Cornell Box with area light. Note that the surfel size has been reduced to exhibit the surfel shape and distribution.}
    \label{fig:surfelcloud}
 \end{figure}
 
-Each geometric primitive uses the same general algorithm to generate surfels, with differences in how the initial points are generated. We begin by generating a random distribution of points on the surface of the primitive, and use those points as the center for each triangular surfel. There has yet to be developed any algorithm with which to generate a uniformly random distribution of points on arbitrarily transformed geometry in linear time. In fact, Paul Bourke's methods in \cite{bib:bourke_spheregen} and \cite{bib:bourke_pointdist} require specific geometry that has not been transformed to generate a point distribution, and operate in polynomial time.
+Each geometric primitive uses the same general algorithm to generate surfels, with differences in how the initial points are generated. We begin by generating a random distribution of points on the surface of the primitive, and use those points as the center for each triangular surfel. There has yet to be developed any algorithm with which to generate a uniformly random distribution of points on arbitrarily transformed geometry in linear time. Sampling untransformed geometry can be performed in linear time, but the subsequent transformation will result in a non-uniform distribution. In fact, Paul Bourke's methods in \cite{bib:bourke_pointdist} and \cite{bib:bourke_spheregen} require specific geometry that has not been transformed to generate a point distribution, and operate in polynomial time.
 
-Our distribution algorithm is novel in its support for arbitrarily transformed geometry, but still requires polynomial time. However, because surfels are generated as a pre-process; the runtime does not affect our results. In general, we calculate our point distributions by first generating random points on the surface of our geometry, then pruning the two closest points repeatedly until we achieve the desired number of points. While in theory this algorithm does not achieve a mathematically uniform distribution, in practice it distributes the points well enough to achieve our goal of quantitatively similar results to Monte Carlo ray-tracing, is simple to understand and implement, and meets our requirement of supporting arbitrarily transformed geometry.
+Our distribution algorithm is novel in its support for arbitrarily transformed geometry, but still requires polynomial time. However, because surfels are generated as a pre-process; the run time does not affect our results. In general, we calculate our point distributions by first generating random points on the surface of our untransformed geometry, transforming these points, then pruning the two closest, repeatedly, until we achieve the desired number of points. While in theory this algorithm does not achieve a mathematically uniform distribution, in practice it distributes the points well enough to achieve our goal of quantitatively similar results to Monte Carlo ray-tracing, is simple to understand and implement, and meets our requirement of supporting arbitrarily transformed geometry. One major limitation of this algorithm is that it sacrifices extra work at the cost of simplicity: in the case of untransformed geometry, we could generate exactly the number of points required, but instead we proceed with the oversampling and culling without it being a necessity.
 
-Once the points have been computed, the three triangle vertices are generated by adding the point's surface tangent vector to the point to solve for the first vertex, then rotating that vector by 120 degrees to solve for the second, and once more for the third. The length of the vector is determined by multiplying the distance between the two closest points and a constant. The goal is to have coverage over the surface of the geometry without superfluous gaps or overlaps. We have found that doubling the distance results in satisfactory coverage.
+Once a point, $p$, has been computed, the three triangle vertices are generated by adding the point's surface tangent vector, $v$, to $p$ to solve for the first vertex, then we rotate $v$ by 120 degrees to solve for the second, and once more for the third. The length of $v$ is determined by multiplying the distance between the two closest sample points on the geometry and a constant. The goal is to have coverage over the surface of the geometry without superfluous gaps or overlaps. We have found that doubling the distance results in satisfactory coverage.
 
-We discuss the general surfel generation algorithm in Section \ref{sec:surfel_gen}. We also discuss the specific point generation algorithms for boxes, spheres, and triangles in Section \ref{sec:point_gen}. In Section \ref{sec:surfel_gen} we discuss our algorithm for constructing traingular surfels, and in Section \ref{sec:VBOStorage} we discuss our storage method for these surfels.
+\begin{figure}[h!]
+   \centering
+   \includegraphics[width=50mm]{../img/triangle_surfel_construction.png}
+   \captionfonts
+   \caption[Triangle surfel construction]{The construction of our triangular surfels; $v$ is the surface tangent, at the sample point, $p$. Its length is determined by the two closest sample points on a given geometric primitive, multiplied by two. The other vertices are constructed by rotating the first by $120^{\circ}$.}
+   \label{fig:surfel_cloud_simple}
+\end{figure}
+
+We discuss the general surfel generation algorithm in Section \ref{sec:surfel_gen}. We also discuss the specific point generation algorithms for boxes, spheres, and triangles in Section \ref{sec:point_gen}. In Section \ref{sec:surfel_gen} we discuss our algorithm for constructing triangular surfels, and in Section \ref{sec:VBOStorage} we discuss our storage method for these surfels.
 
 % ---- SUBSECTION: Point Generation ----
 \subsection{Point Generation}
 \label{sec:point_gen}
 
-In order to generate surfels for a any of our geometric primitives, we first generate a point distribution to act as center points for our surfels. The strategy we use for point distribution is stratified stochastic sampling.
+In order to generate surfels for any of our geometric primitives, we first generate a point distribution to act as center points for our surfels. The strategy we use for point distribution is stratified stochastic sampling.
 
 % ---- SUBSUBSECTION: Box ----
 \subsubsection{Box}
@@ -78,7 +97,7 @@ Points for the box primitive are generated per side. Each side is divided into a
 
 \begin{algorithm}
 \captionfont
-\caption[Box point generation]{Generate stratefied stochastic sample points for a box.}
+\caption[Box point generation]{Generate stratified stochastic sample points for a box.}
 \label{alg:box_point_gen}
 {\fontsize{10}{9}\selectfont
 \begin{algorithmic}
@@ -135,7 +154,7 @@ Point distributions for a sphere can be seen in Figure \ref{fig:small_sphere_sur
 
 \begin{algorithm}[H]
 \captionfont
-\caption[Sphere point generation]{Generate stratefied stochastic sample points for a sphere.}
+\caption[Sphere point generation]{Generate stratified stochastic sample points for a sphere.}
 \label{alg:sphere_point_gen}
 {\fontsize{10}{9}\selectfont
 \begin{algorithmic}
@@ -174,7 +193,7 @@ Point distributions for a triangle can be seen in Figure \ref{fig:small_triangle
 
 \begin{algorithm}[H]
 \captionfont
-\caption[Triangle point generation]{Generate stratefied stochastic sample points for a triangle.}
+\caption[Triangle point generation]{Generate stratified stochastic sample points for a triangle.}
 \label{alg:triangle_point_gen}
 {\fontsize{10}{9}\selectfont
 \begin{algorithmic}
@@ -205,7 +224,7 @@ Point distributions for a triangle can be seen in Figure \ref{fig:small_triangle
 
 With the previous point distribution algorithms, we must address the issue of non-uniform scaling. For example, if we are generating points for a box scaled more in the y-axis than the x- or z-axis, then our computed sample points will be further spaced apart along that axis. This leaves us with a sampling pattern that is not uniform, but stretched in one direction.
 
-Our solution to this problem is simple, easy to implement, and novel in the fact that it is geometry and transformation independent. We generate a multiple of the requested number of sample points, jitter their location, and repeatedly cull the two closest points until we arrive at the desired number of points. In this way, we work backwards to a more uniform distribution in a way that supports arbitrary geometric topology and transformations. Figures \ref{fig:small_box_surfels}, \ref{fig:small_sphere_surfels}, and \ref{fig:small_triangle_surfels} show the result of this process for varying multiples of the requested number of surfels; notice the coverage issues caused by not generating more than the requested number of surfels (e.g. Figure \ref{fig:box500s}).
+Our solution to this problem is simple, easy to implement, and novel in the fact that it is geometry and transformation independent. We generate a multiple of the requested number of sample points on the untransformed geometry, jitter their location, transform them using the source geometry's model transformation, and repeatedly cull the two closest points until we arrive at the desired number of points. In this way, we work backwards to a more uniform distribution in a way that supports arbitrary geometric topology and transformations. It is important to note that our algorithm discovers the two closest points using a $O(n^{2})$ algorithm. This could potentially be accelerated with a spatial data structure (see Section \ref{sec:future_spatial}). Figures \ref{fig:small_box_surfels}, \ref{fig:small_sphere_surfels}, and \ref{fig:small_triangle_surfels} show the result of this process for varying multiples of the requested number of surfels; notice the coverage issues caused by not generating more than the requested number of surfels (e.g. Figure \ref{fig:box500s}).
 
 The pseudocode is listed in Algorithm \ref{alg:point_gen}.
 
@@ -233,7 +252,7 @@ The pseudocode is listed in Algorithm \ref{alg:point_gen}.
 
 With the points generated, our surfel generation algorithm is quite simple: it consists of using the sample points as the center for triangular surfels. The question we must answer is what surface area will achieve adequate coverage of the source geometry. Too large of a surface area results in extending our surfel borders beyond the edges of our geometry as well as excessive surfel overlapping. Too small of a surface area results in gaps between surfels. Both of these issues will cause artifacts in our rendering by misrepresenting the source geometry.
 
-Our algorithm uses the distance between the two closest sample points as the theoretical radius required for disk surfels to adequately cover the geometry. (In practice, we double this radius in order to ensure coverage.) In order for our triangle surfels to match this surface area, we extrapolate the length of the vector from triangle surfel center to equilateral vertex using Equation \ref{eqn:tri_dist}.
+Our algorithm uses the distance between the two closest sample points as the theoretical radius required for disk surfels to adequately cover the geometry. In practice, we double this radius in order to ensure coverage. In order for our triangle surfels to match this surface area, we extrapolate the length of the vector from triangle surfel center to equilateral vertex using Equation \ref{eqn:tri_dist}.
 
 \begin{equation}
 vectorLength = \sqrt{ \frac{ \pi * radius^2 }{ \sqrt{3} * \sin^2(60) } }
@@ -241,9 +260,9 @@ vectorLength = \sqrt{ \frac{ \pi * radius^2 }{ \sqrt{3} * \sin^2(60) } }
 \end{equation}
 ~
 
-However, the random jittering of sample points often results in initial sample points that are very close together. While the jittering produces the desired randomness, it also gives us too low an estimate of the required radius; the result of which can be seen in Figure \ref{fig:box500}. But the aforementioned point culling solution (see Section \ref{sec:point_gen}) also solves this problem. By culling the closest points, we create a more uniform distribution with less variance in the distance between adjacent sample points.
+However, the random jittering of sample points often results in initial sample points that are very close together. While the jittering produces the desired randomness, it also gives us too low an estimate of the required radius; the result of which can be seen in Figure \ref{fig:box500}. But the aforementioned point culling solution (see Section \ref{sec:point_gen}) also solves this problem. By generating a multiple of the desired number of points, and culling the closest ones, we create a more uniform distribution with less variance in the distance between adjacent sample points. We have found that a multiple of two produces visually acceptable results, while greater multiples do not contribute further. The results of varying number of generated points (culled to 500) are illustrated in Figures \ref{fig:small_box_surfels}, \ref{fig:box_surfels}, \ref{fig:small_sphere_surfels}, \ref{fig:sphere_surfels}, \ref{fig:small_triangle_surfels}, and \ref{fig:triangle_surfels}.
 
-For typical surfel generation times per geometric primitive, see Table \ref{tbl:surf_gen_times}. In psuedocode, our surfel generation algorithm is listed in Algorithm \ref{alg:surfel_gen}. And Figure \ref{fig:surfel_cloud_simple} is a rendering of the raw surfel cloud in OpenGL without any lighting.
+For typical surfel generation times per geometric primitive, see Table \ref{tbl:surf_gen_times}. In psuedocode, our surfel generation algorithm is listed in Algorithm \ref{alg:surfel_gen}. Figure \ref{fig:surfel_cloud_simple} is a rendering of the raw surfel cloud in OpenGL without any lighting.
 
 \begin{figure}
    \centering
@@ -389,11 +408,17 @@ For typical surfel generation times per geometric primitive, see Table \ref{tbl:
    \label{fig:triangle_surfels}
 \end{figure}
 
-% ---- SUBSECTION: VBO Storage ----
-\subsection{VBO Storage}
+% ---- SUBSECTION: Surfel Storage ----
+\subsection{Surfel Storage}
 \label{sec:VBOStorage}
 
-The surfels are generated on the CPU, but they must be rendered by the GPU. Therefore, it is logical to store them in GPU memory. This avoids the latency of transferring data over the CPU-to-GPU bus, which we discuss in Section \ref{sec:cpu_v_gpu}. For this purpose we leverage the OpenGL Vertex Buffer Object, or VBO. This data structure is an array of vertices paired with colors. Additionally, we never update the surfel vertex data, so we can store them on the GPU during our pre-process.
+The surfels are generated on the CPU, but they must be rendered by the GPU. Therefore, it is logical to store them in GPU memory. This avoids the latency of transferring data over the CPU-to-GPU bus, which we discuss in Section \ref{sec:cpu_v_gpu}. For this purpose we leverage the OpenGL Vertex Buffer Object, or VBO. This data structure is an array of vertices paired with colors and normals. Additionally, we never update the surfel vertex data, so we can store them on the GPU during our pre-process where they persist throughout our rendering.
+
+Additionally, it is important to note that in Christensen's PBCB implementation described in \cite{bib:christensen2008} he stores the surfels in an octree (see Section \ref{sec:octree}). This is because, if the surfels being rasterized are far away, it can be more efficient to group them together and treat them as one large surfel, with properties that are the average of the surfels it represents. The octree data structure lends itself to this practice as these large, coalesced, surfels can be constructed at octree nodes during the pre-process and used at render time with no additional computation. In fact, there can be quite a bit less computation, as one surfel is rasterized instead of many.
+
+We do not implement this feature because our implementation renders it irrelevant. The purpose of the octree in Christensen's PBCB implementation \cite{bib:christensen2008} is to reduce the number of surfels rasterized. But our GPU implementation rasterizes the entirety of the surfel cloud in one rendering pass, we do not require this optimization, and therefore avoid the system complexity it introduces.
+
+Furthermore, it would actually diminish our performance to implement the octree feature as it stands in \cite{bib:christensen2008}. The VBO stored in GPU memory is static, is marked as such, and is therefore optimized by the OpenGL subsystem to remain on the GPU. If we update the geometry we intend to render (i.e. the VBO), then we incur the cost of at least one CPU-to-GPU transfer of data. We find this unacceptable for our goals, and therefore omit this implementation detail of PBCB.
 
 %-------------------------------------------------------------------------------
 % SECTION: Rendering
@@ -413,7 +438,7 @@ We then iterate over the list of rays, tracing them against the scene geometry t
 
 Once we solve for the ray's intersection point with a geometric object, we calculate lighting. Because light calculations are additive \cite{bib:pbr}, we can split the calculation into a direct and an indirect computation.
 
-Our direct lighting calculation is quite simple: in the case of point lighting, we simply trace one shadow ray \cite{bib:pbr} and if the path to the light is unobstructed, then we calculate standard Phong shading (see section \ref{sec:phong_model}), and in the case of area lighting we trace multiple shadow rays, in a uniform random distribution over the area light geometry, and scale the shading by the percent of unobstructed rays.
+Our direct lighting calculation is quite simple: in the case of point lighting, we simply trace one shadow ray \cite{bib:pbr} and if the path to the light is unobstructed, then we calculate standard Phong shading (see Section \ref{sec:phong_model}), and in the case of area lighting we trace multiple shadow rays, in a uniform random distribution over the area light geometry, and scale the shading by the percent of unobstructed rays.
 
 % ---- SUBSECTION: Anti-aliasing ----
 %\subsection{Anti-aliasing}
@@ -438,11 +463,11 @@ Our direct lighting calculation is quite simple: in the case of point lighting, 
 % ---- SUBSECTION: Indirect Gather via Rasterization (GPU PBCB) ----
 \subsection{Indirect Gather via Rasterization (GPU PBCB)}
 \label{sec:indirect}
-By using the GPU's ability to rasterize triangles, we capture the incoming radiance at a ray intersection point by rasterizing our surfel cloud onto five 8 by 8 pixel textures arranged into a cube about the point. The cube represents the hemisphere used in the radiance integral (section \ref{sec:radiance}) . Using this technique, we attempt to realize a speedup over Monte Carlo ray-tracing as well as software-based PBCB. The psuedocode is listed in Algorithm \ref{alg:indirect_illum}.
+By using the GPU's ability to rasterize triangles, we capture the incoming radiance at a ray intersection point by rasterizing our surfel cloud onto five 8 by 8 pixel textures arranged into a cube about the point. The cube represents the hemisphere used in the radiance integral (Section \ref{sec:radiance}) . Using this technique, we attempt to realize a speedup over Monte Carlo ray-tracing as well as software-based PBCB. The psuedocode is listed in Algorithm \ref{alg:indirect_illum}.
 
 \begin{algorithm}
 \captionfont
-\caption[Indirect Illumination]{Psuedocode for our Indirect Illumination algorithm.}
+\caption[Indirect illumination]{Psuedocode for our indirect illumination algorithm.}
 \label{alg:indirect_illum}
 {\fontsize{10}{9}\selectfont
 \begin{algorithmic}
@@ -460,12 +485,15 @@ By using the GPU's ability to rasterize triangles, we capture the incoming radia
             \State $b := 1/4$
             \State //see fig. \ref{fig:cubemap_texture}
             \State $jPixelCenter := textureCenter + (a*nearPlane + b*nearPlane*x)*right + (a*nearPlane + b*nearPlane*y)*camera.$up
-            \State $sampleDirection$ := normalize($jPixelCenter - intersection.$point)
-            \State $weight := intersection$.normal$ \cdot sampleDirection$
-            \State $indirectColor$ += $weight * pixelData[j] * intersection$.surfaceColor
+            \State $sampleDirection$ := normalize($jPixelCenter - camera.$location)
+            \State $weight := $clamp($intersection$.normal$ \cdot sampleDirection, 0$)
+            \If{$weight > 0$}
+               \State $indirectColor$ += $weight * pixelData[j] * intersection$.surfaceColor
+               \State $totalPixels += 1$
+            \EndIf
          \EndFor
       \EndFor
-      \State $indirectColor$ /= $5 * 64$
+      \State $indirectColor$ /= $totalPixels$
       \State \Return $indirectColor$
    \EndFunction
 \end{algorithmic}
@@ -474,13 +502,13 @@ By using the GPU's ability to rasterize triangles, we capture the incoming radia
 
 Our implementation utilizes the OpenGL API, along with helper libraries: GLUT and GLEW. Therefore, as a preamble to the algorithm, we must initialize OpenGL. This requires creating the OpenGL rendering context and associated buffers, and setting some constant state. In our case, we require an 8 by 8 pixel color texture and depth texture, and a vertex buffer with which we store our surfel data. Lastly, we set the constant rendering state by disabling OpenGL lighting such that the color we calculate in the surfel generation preprocess will be used directly, and by binding our textures and buffers, which informs OpenGL on how to use each buffer (e.g. render to color texture, or where vertex, color, and surface normal data is per triangle in the VBO).
 
-As discussed in Section \ref{sec:rendering_ray_tracing} and \ref{sec:ray_tracing_intro}, the geometry intersection for each ray is computed, and then lighting for that point is calculated. And because light is linear \cite{bib:pbr}, we can calculate our indirect illumination separately from direct, and combine at a later time.
+As discussed in Section \ref{sec:rendering_ray_tracing} and \ref{sec:ray_tracing_intro}, the geometry intersection for each ray is computed, and then we calculate our indirect and direct illumination separately, combining later, because light is linear \cite{bib:pbr}.
 
-We begin our indirect illumination calculation for each intersection point by constructing five cameras that hold the render state required to rasterize each cube face. The cameras store their location, direction, up-vector, field of view, and near and far planes. The location for each camera is inherited from the intersection point. The direction is the intersection point's surface normal for the camera representing the top of the cube, and for the remaining cameras, we use the surface tangent, rotated in 90$^\circ$ increments. The up-vector for the cube-side cameras is the surface normal, and the top camera uses one of the side camera's direction vector. The field of view is set to 90$^\circ$ for each camera such that their viewing frustums fit together with no gaps (see figures \ref{fig:cubemap_top} \& \ref{fig:cubemap_side}). The near plane is set to 0.01, and the far plane is set to 15, which we have found offers good results for our test scene.
+We begin our indirect illumination calculation for each intersection point by constructing five cameras that hold the render state required to rasterize each cube face. The cameras store their location, direction, up-vector, field of view, and near and far planes. The location for each camera is inherited from the intersection point. The direction is the intersection point's surface normal for the camera representing the top of the cube, and for the remaining cameras, we use the surface tangent, rotated in 90$^\circ$ increments. The up-vector for the cube-side cameras is the surface normal, and the top camera uses one of the side camera's direction vector. The field of view is set to 90$^\circ$ for each camera such that their viewing frustums fit together with no gaps (see Figures \ref{fig:cubemap_top} \& \ref{fig:cubemap_side}). The near plane is set to 0.01, and the far plane is set to 15, which we have found offers good results for our test scene because the height of the Cornell Box is 10 units.
 
 \begin{figure}[h!]
    \centering
-   \includegraphics[width=100mm]{../img/cubemap_topview.png}
+   \includegraphics[width=50mm]{../img/cubemap_topview.png}
    \captionfonts
    \caption[Cubemap top-view]{Top view of the cameras that comprise our cube map.}
    \label{fig:cubemap_top}
@@ -488,13 +516,23 @@ We begin our indirect illumination calculation for each intersection point by co
 
 \begin{figure}[h!]
    \centering
-   \includegraphics[width=100mm]{../img/cubemap_sideview.png}
+   \includegraphics[width=50mm]{../img/cubemap_sideview.png}
    \captionfonts
    \caption[Cubemap side-view]{Side view of the cameras that comprise our cube map.}
    \label{fig:cubemap_side}
 \end{figure}
 
-Once the cube-face cameras are constructed, we iterate over each, and rasterize the surfel cloud onto an 8 by 8 pixel texture at the camera's near plane (see figure \ref{fig:cubemap_texture}). This texture data must then be read back from the GPU, and convolved into one indirect illumination value. We do this by iterating over each pixel, and adding it's contribution, calculated using the diffuse component of the Phong reflectance model (see section \ref{sec:phong_model}) to the final color.
+Once the cube-face cameras are constructed, we iterate over each, and rasterize the surfel cloud onto an 8 by 8 pixel texture at the camera's near plane (see Figure \ref{fig:cubemap_texture}). This texture data must then be read back from the GPU, and convolved into one indirect illumination value. We do this by iterating over each pixel, and adding its contribution, calculated using the diffuse component calculation of the Phong reflectance model (see Section \ref{sec:phong_model}), to the final color.
+
+Because we calculate the pixel's weight using Lambert's Law, the bottom half of the cube-face sides are effectively not contributing due to their $n \cdot l$ factor being negative. This issue is visualized in Figure \ref{fig:cubemap_rays}. This problem is unavoidable, however, because the cameras' view frustums must be equal in dimensions in order to properly emulate the hemisphere with uniform distribution.
+
+\begin{figure}[h!]
+   \centering
+   \includegraphics[width=100mm]{../img/cubemap_rays.png}
+   \captionfonts
+   \caption[Cubemap pixel-rays]{A few example rays, used as the $l$ in the $n \cdot l$ weighting factor for the pixel color values, during cube-face convolution. The red ray designates that the pixel will not contribute due to a negative $n \cdot l$ factor.}
+   \label{fig:cubemap_rays}
+\end{figure}
 
 \begin{figure}[h!]
    \centering
@@ -517,7 +555,7 @@ We then write the final color value to our image in memory. We store the final i
 % SECTION: Review
 %-------------------------------------------------------------------------------
 \section{Review}
-We have presented a rendering algorithm that achieves an order of magnitude speedup over Monte Carlo ray-tracing on certain hardware, namely heterogenous chip architectures, with the knowledge that the future work discussed in Section \ref{sec:future_work} would extend our results to all hardware.
+We have presented a rendering algorithm that achieves an order of magnitude speedup over Monte Carlo ray-tracing on certain hardware, namely heterogeneous chip architectures, with the knowledge that the future work discussed in Section \ref{sec:future_work} would extend our results to all hardware.
 
 As an integral step of the algorithm, we have discussed our novel surfel generation algorithms for each of our supported primitives. Our surfel generation algorithms not only generate the triangles required by GPU-hardware for rasterization, but produce reasonably uniform coverage for arbitrarily transformed geometry.
 

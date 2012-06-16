@@ -1,4 +1,7 @@
 \chapter{Background}
+\label{ch:background}
+
+ In our background section we will cover concepts that form the underpinnings of our thesis work. Specifically, we will discuss radiance in Section \ref{sec:radiance} in order to understand why sampling a hemisphere is integral to any global illumination algorithm. We discuss the Phong reflection model in Section \ref{sec:phong_model} because we use this simplified lighting model in our algorithm. Section \ref{sec:anti-aliasing} describes the concept of anti-aliasing, which is a feature of our algorithm. We cover octrees in Section \ref{sec:octree}, which are used in Christensen's PBCB implementation \cite{bib:christensen2008} in order to store the surfel cloud. Monte Carlo integration is the basis for the Monte Carlo ray-tracer we have implemented for comparison against our GPU PBCB algorithm, and is discussed in Section \ref{sec:monte_carlo_integration}. And lastly, we address the system architecture characteristics of the CPU and GPU, as well as how heterogeneous chips are changing them, in Sections \ref{sec:cpu_v_gpu} and \ref{sec:heterogeneous_chips}, respectively.
 
 %-------------------------------------------------------------------------------
 % SECTION: Radiance
@@ -18,19 +21,19 @@ We can now define radiance as the flux density with respect to a projected area 
 L = \frac{d^{2}\phi}{dA*\cos\theta*dw}
 \label{eqn:radiance}
 \end{equation}
-Incoming radiance, or irradiance, is the radiance arriving at a surface, or the flux density of arriving light. We can define this in terms of radiance, where $x$ is a surface point and $w$ is the incoming ray direction, as:
+Incoming radiance, or irradiance, is the radiance arriving at a surface, or the flux density of arriving light. We can define this in terms of radiance, where $x$ is a surface point and $w^{\prime}$ is the incoming ray direction, as:
 \begin{equation}
-E(x,w) = L(x,w) * \cos\theta * dw
+E(x,w^{\prime}) = L(x,w^{\prime}) * \cos\theta * dw^{\prime}
 \label{eqn:irradiance}
 \end{equation}
 Further more, we integrate over a hemisphere to solve for the incoming radiance, at point $x$, in all directions:
 \begin{equation}
-E(x) = \int L(x,w) * \cos\theta * dw
+E(x) = \int L(x,w^{\prime}) * \cos\theta * dw^{\prime}
 \label{eqn:irradiance_integral}
 \end{equation}
-Ultimately we are interested in the reflected radiance: the amount of irradiance that is reflected by a surface back towards our virtual camera. This is based on the material properties of the surface, which is typically represented by a BRDF (bi-direction reflectance distribution function). BRDFs are defined per-surface, and represented as $f(x, w^{\prime}, w)$. They solve for the ratio of radiance that is transmitted from an incoming direction, $w^{\prime}$, to an outgoing direction, $w$, at a surface point, $x$ (see figure \ref{fig:incoming_radiance}). Incorporating the BRDF, the equation for reflected radiance is:
+Ultimately we are interested in the reflected radiance: the amount of irradiance that is reflected by a surface back towards our virtual camera. This is based on the material properties of the surface, which is typically represented by a BRDF (bi-direction reflectance distribution function). BRDFs are defined per-surface, and represented as $f(x, w^{\prime}, w)$. They solve for the ratio of radiance that is transmitted from an incoming direction, $w^{\prime}$, to an outgoing direction, $w$, at a surface point, $x$ (see Figure \ref{fig:incoming_radiance}). Incorporating the BRDF, the equation for reflected radiance is:
 \begin{equation}
-L(p) = \int f(x, w^{\prime}, w) * L(p,w) * \cos\theta * dw
+L(x) = \int f(x, w^{\prime}, w) * L(x,w^{\prime}) * \cos\theta * dw^{\prime}
 \label{eqn:radiance_integral}
 \end{equation}
 
@@ -38,7 +41,7 @@ L(p) = \int f(x, w^{\prime}, w) * L(p,w) * \cos\theta * dw
    \centering
    \includegraphics[width=100mm]{../img/rendering-equation-image.png}
    \captionfonts
-   \caption[Incoming radiance hemisphere]{Incoming radiance in a hemisphere about a point, reflecting towards the camera. \cite{bib:nikishin_radiance}}
+   \caption[Incoming radiance hemisphere]{Incoming radiance in a hemisphere about a point, reflecting towards the camera \cite{bib:nikishin_radiance}.}
    \label{fig:incoming_radiance}
 \end{figure}
 
@@ -48,23 +51,25 @@ L(p) = \int f(x, w^{\prime}, w) * L(p,w) * \cos\theta * dw
 \section{Phong Reflection Model}
 \label{sec:phong_model}
 
-The Phong reflection model is a simplified shading model used to calculate reflected radiance from one light source. It is most commonly used in scenarios that require fast computation, such as real-time graphics applications. It was presented by Phong in his University of Utah Ph.D. dissertation in 1973 \cite{bib:phong_thesis}. The equation calculates the reflected radiance using three color-vector terms: an ambient, diffuse, and specular.
+The Phong reflection model is a simplified shading model used to calculate reflected radiance, given one incident light ray. It is most commonly used in scenarios that require fast computation, such as real-time graphics applications. It was presented by Phong in his University of Utah Ph.D. dissertation in 1973 \cite{bib:phong_thesis}. The equation calculates the reflected radiance using three color-vector terms: an ambient, diffuse, and specular.
 
 The ambient component represents indirect illumination as a constant amount of reflected radiance added to all shaded points. This is the simplest term, but also poorly represents the subtleties of indirect illumination.
 
-The diffuse component represents direct illumination using Lambertian reflectance of the incoming radiance. Lambertian refers to Lambert's cosine law, which states that, for perfectly diffuse surfaces, the diffuse reflected radiance is proportional to the cosine of the angle between the surface normal and the view vector, $\theta_{i}$. Figure \ref{fig:phong} visualizes these components.
+we're
+
+The diffuse component represents direct illumination using Lambertian reflectance of the incoming radiance. Lambertian refers to Lambert's cosine law, which states that, for perfectly diffuse surfaces, the diffuse reflected radiance is proportional to the cosine of the angle between the surface normal and the light vector, $\theta_{i}$. This is clamped in the range [0,1] to avoid subtracting light, and is commonly referred to as the \textit{$n \cdot l$ factor} \cite{bib:rtr}, a convention we shall adopt in this thesis. Figure \ref{fig:phong} visualizes these components.
 
 \begin{figure}
    \centering
    \includegraphics[width=100mm]{../img/RTR3_05_13_phong.png}
    \captionfonts
-   \caption[Phong Shading Vectors]{The vectors involved in the Phong Reflectance Model. \cite{bib:rtr}}
+   \caption[Phong Shading Vectors]{The vectors involved in the Phong Reflectance Model \cite{bib:rtr}.}
    \label{fig:phong}
 \end{figure}
 
 The specular component represents the shininess we can view from certain angles on highly reflective surfaces. Specular reflectance is calculated by raising the cosine of the angle between the surface normal and the half vector (the vector halfway between the view and light vector), $\theta_{h}$, to the shininess of the surface, $s$.
 
-Each of these components represent the ratio of incoming radiance, $C_{light}$ to reflected radiance, $C_{out}$, but the reflected radiance is also scaled by the surface material’s color characteristics, $C_{mat}$, as well as ambient, diffuse, and specular characteristics (represented by the scalar ratios: $M_{amb}$, $M_{diff}$, and $M_{spec}$, respectively). Combining these components we get the final Phong reflection model equation:
+Each of these components represent the ratio of incoming radiance, $C_{light}$ to reflected radiance, $C_{out}$, but the reflected radiance is also scaled by the surface material's color characteristics, $C_{mat}$, as well as ambient, diffuse, and specular characteristics (represented by the scalar ratios: $M_{amb}$, $M_{diff}$, and $M_{spec}$, respectively). Combining these components we get the final Phong reflection model equation:
 \begin{equation}
 C_{out} = (M_{amb} * C_{mat} * C_{light}) + ((n \cdot l) * M_{diff} * C_{mat} * C_{light}) + ((n \cdot h) ^s * M_{spec} * C_{mat} * C_{light})
 \label{eqn:phong}
@@ -74,13 +79,14 @@ C_{out} = (M_{amb} * C_{mat} * C_{light}) + ((n \cdot l) * M_{diff} * C_{mat} * 
 % SECTION: Anti-aliasing
 %-------------------------------------------------------------------------------
 \section{Anti-aliasing}
-Anti-aliasing combats aliasing, the artifacting caused by under-sampling. A typical example of this in signal processing, where an analogue signal is sampled as some rate to determine it’s amplitude at that point in time. If the sample rate is too low (i.e. under-sampling) then the signal will not be accurately captured because the signal’s characteristics between samples was lost. This can be seen in Figure \ref{fig:undersampling}.
+\label{sec:anti-aliasing}
+Anti-aliasing combats aliasing, the artifacting caused by under-sampling. A typical example of this in signal processing, where an analogue signal is sampled as some rate to determine its amplitude at that point in time. If the sample rate is too low (i.e. under-sampling) then the signal will not be accurately captured because the signal's characteristics between samples was lost. This can be seen in Figure \ref{fig:undersampling}.
 
 \begin{figure}[h!]
    \centering
    \includegraphics[width=100mm]{../img/RTR3_05_21_undersampling.png}
    \captionfonts
-   \caption[Signal Undersampling]{The blue signals are being undersampled by the red dots, which leads to inaccurate reconstruction as evidenced by the dotted green line. \cite{bib:rtr}}
+   \caption[Signal Undersampling]{The blue signals are being undersampled by the red dots, which leads to inaccurate reconstruction as evidenced by the dotted green line \cite{bib:rtr}.}
    \label{fig:undersampling}
 \end{figure}
 
@@ -112,6 +118,24 @@ An example image of anti-aliasing in our rendering algorithm can be seen in Figu
 \end{figure}
 
 %-------------------------------------------------------------------------------
+% SECTION: Octree
+%-------------------------------------------------------------------------------
+\section{Octree}
+\label{sec:octree}
+
+Octrees are a type of spatial data structure. These data structures are useful in order to accelerate queries about what objects are adjacent to a point, or what objects overlap or are spacially close. Due to their hierarchical construction, they typically improve spatial queries from $O(n)$ to $O(\log{n})$ \cite{bib:rtr}. 
+
+Octrees enclose the entire scene in an axis-aligned bounding box, and recursively, as well as regularly, subdivide the the box in all three dimensions (x, y , and z). This produces eight equal-sized child boxes, hence the name “octree.” An illustration of this can be found in Figure \ref{fig:octree}.
+
+\begin{figure}
+   \centering
+   \includegraphics[width=100mm]{../img/octree.png}
+   \captionfonts
+   \caption[Octree]{The hierarchical levels of an octree \cite{bib:octree}.}
+   \label{fig:octree}
+\end{figure}
+
+%-------------------------------------------------------------------------------
 % SECTION: Monte Carlo Integration
 %-------------------------------------------------------------------------------
 \section{Monte Carlo Integration}
@@ -123,7 +147,7 @@ We use Monte Carlo to evaluate the complex integral in Equation \ref{eqn:radianc
 
 The main drawback of Monte Carlo integration is that it only converges at a rate of $O(n^{-1/2})$, with n being the number of discrete random samples. This means that increasing the number of samples by 4 would only reduce the error by half \cite{bib:pbr}. And because each sample requires one or more rays to be traced against the scene geometry and shaded at their intersection point, it quickly becomes cost-prohibitive to obtain low-error results. Error in this technique is exhibited by adjacent pixels that have disparity in their brightness and color, or noise.
 
-Most of the current research in Monte Carlo for computer graphics is aimed at reducing this error through methods other than increasing the sample count \cite{bib:pbr}. One technique we use to better distribute the sample rays across the unit hemisphere is to discretize the hemisphere into a grid of sample directions with higher density in areas of higher importance, namely the top of the hemisphere where the $n \cdot l$ factor is largest, and jitter each sample direction by a random amount.
+Most of the current research in Monte Carlo for computer graphics is aimed at reducing this error through methods other than increasing the sample count \cite{bib:pbr}. One technique we use to better distribute the sample rays across the unit hemisphere is to discretize the hemisphere into a grid of sample directions with higher density in areas of higher importance, namely the top of the hemisphere where the $n \cdot l$ factor is largest, and jitter each sample direction by a random amount. This is an example of stratified sampling, combined with importance sampling.
 
 %-------------------------------------------------------------------------------
 % SECTION: CPU versus GPU
@@ -131,9 +155,9 @@ Most of the current research in Monte Carlo for computer graphics is aimed at re
 \section{CPU versus GPU}
 \label{sec:cpu_v_gpu}
 
-due to their purpose. The CPU is considered a serial processor that handles general computation, which is typically thought of as instruction-driven, and involves executing unpredictable instructions on irregular data and likely includes branching. The GPU, on the other hand, is a stream processor optimized for data-driven graphics rendering of more regular data with predictable memory access. \cite{bib:rtr}
+The CPU and the GPU are both processors, but have quite different architectures due to their purpose. The CPU is considered a serial processor that handles general computation, which is typically thought of as instruction-driven, and involves executing unpredictable instructions on irregular data and likely includes branching. The GPU, on the other hand, is a stream processor optimized for data-driven graphics rendering of more regular data with predictable memory access \cite{bib:rtr}.
 
-Because of their differing purposes, the CPU and GPU have traditionally been divided into two physically separate components of a computer system’s architecture connected by the PCI bus. The application running on the CPU will transmit rendering data and instructions over this bus to the GPU, which will process this input and produce a rendering. Depending on the purpose of this rendering, it can either be displayed on a monitor attached directly to the GPU, or transmitted back over the bus to the CPU for additional processing. As is common in multiprocessing systems, the two common problems we experience are load balancing and communication \cite{bib:rtr}. 
+Because of their differing purposes, the CPU and GPU have traditionally been divided into two physically separate components of a computer system's architecture connected by the PCI bus. The application running on the CPU will transmit rendering data and instructions over this bus to the GPU, which will process this input and produce a rendering. Depending on the purpose of this rendering, it can either be displayed on a monitor attached directly to the GPU, or transmitted back over the bus to the CPU for additional processing. As is common in multiprocessing systems, the two common problems we experience are load balancing and communication \cite{bib:rtr}. 
 
 Load balancing can take place between the CPU and GPU, as well as internally within the GPU. The programmer is generally responsible for handing the load balancing between these two components, while the GPU itself leverages FIFO queues between stages to avoid stalling any part of the pipeline.
 
@@ -143,11 +167,17 @@ The latency and bandwidth of the bus connecting the CPU and GPU can cause commun
 % SECTION: Heterogenous Chip Architectures
 %-------------------------------------------------------------------------------
 \section{Heterogenous Chip Architectures}
-\label{sec:heterogenous_chips}
+\label{sec:heterogeneous_chips}
 
-The traditional architecture for systems with both CPU and GPUs involves the PCI bus, which connects two these two disparate components. However, recent advancements have allowed chip densities so high that both CPU and GPU can fit onto one silicon chip. These architectures, that combine CPU and GPU, are called heterogenous chips.
+The traditional architecture for systems with both CPU and GPUs involves the PCI bus, which connects these two disparate components. However, recent advancements have allowed chip densities so high that both CPU and GPU can fit onto one silicon chip. These architectures, that combine CPU and GPU, are called heterogeneous chips.
 
 Intel has released both Sandy Bridge and, more recently, Ivy Bridge architectures \cite{bib:intel_press} that adhere to this ethos, and AMD has released Fusion \cite{bib:amd_press}. By combining both the CPU and GPU onto one chip, the hardware can bypass the shortcomings of the PCI bus to more quickly communicate.
 
-In systems utilizing the traditional architecture, rendering small scenes that require final data processing on the CPU would have been cost-prohibitive due to the latency required to transfer data from CPU to GPU and back again. However, with heterogenous chip architectures, we can almost ignore this latency in our algorithms; allowing for new-found simplicity.
+In systems utilizing the traditional architecture, rendering small scenes that require final data processing on the CPU would have been cost-prohibitive due to the latency required to transfer data from CPU to GPU and back again. However, with heterogeneous chip architectures, we can almost ignore this latency in our algorithms; allowing for new-found simplicity.
 
+%-------------------------------------------------------------------------------
+% SECTION: Heterogenous Chip Architectures
+%-------------------------------------------------------------------------------
+\section{Review}
+
+In this section we have covered the important concepts that frame our exploration of GPU-accelerated Point-Based Color Bleeding. The concept of radiance gives us the motivation to sample a hemisphere, while Monte Carlo integration allows us to discretely sample in order to estimate the integral over that hemisphere. We use the Phong reflection model in order to calculate the reflected radiance after gathering the irradiance samples. Anti-aliasing is a feature of our renderer, although not essential to the functioning of our renderer. We addressed the octree spatial data structure used in Christensen's PBCB \cite{bib:christensen2008} for surfel storage. Lastly, we compared and contrasted the CPU and GPU in order to motivate our use of the GPU to accelerate our algorithm, and covered the wrinkles introduced by new heterogeneous chip architectures.
